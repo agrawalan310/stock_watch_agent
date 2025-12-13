@@ -63,6 +63,13 @@ class Evaluator:
             if percent_change <= -drop_threshold:
                 alert_reasons.append(f"Price dropped {abs(percent_change):.2f}% from buy price ${note.buy_price:.2f}")
         
+        # Percentage above buy price (e.g., "10% above buy price")
+        if conditions.get("percent_above_buy") and note.buy_price:
+            percent_threshold = conditions["percent_above_buy"]
+            percent_change = ((current_price - note.buy_price) / note.buy_price) * 100
+            if percent_change >= percent_threshold:
+                alert_reasons.append(f"Price is {percent_change:.2f}% above buy price ${note.buy_price:.2f} (threshold: {percent_threshold}%)")
+        
         # Percentage change from today (if we have previous close)
         if conditions.get("percent_change") and price_info.get("previous_close"):
             change_threshold = conditions["percent_change"]

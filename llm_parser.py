@@ -199,6 +199,7 @@ Extract and return ONLY valid JSON with the following structure:
         "price_between": {{"min": number, "max": number}} or null,
         "percent_change": number or null,
         "percent_drop": number or null,
+        "percent_above_buy": number or null,
         "time_period_days": number or null,
         "reminder_days": number or null,
         "trailing_stop": number or null
@@ -210,18 +211,23 @@ Rules:
 1. Normalize stock symbols to uppercase (e.g., "nvidia" -> "NVDA", "Apple" -> "AAPL")
 2. Extract buy_price if user mentions purchasing price
 3. Extract conditions from phrases like:
-   - "crosses 200$" -> price_above: 200
-   - "goes below 65$" -> price_below: 65
+   - "crosses 200$" or "above 200$" -> price_above: 200
+   - "goes below 65$" or "below 65$" -> price_below: 65
    - "between 300 and 310" -> price_between: {{"min": 300, "max": 310}}
-   - "falls more than 15%" -> percent_drop: 15
+   - "falls more than 15%" or "drops 15%" -> percent_drop: 15
+   - "10% above buy price" or "10% above this price" -> percent_above_buy: 10
+   - "rises 20% from buy" -> percent_above_buy: 20
    - "in 3 months" -> reminder_days: 90
    - "after a month" -> time_period_days: 30
    - "trailing stop loss at 300" -> trailing_stop: 300
-4. Set missing values to null (not empty strings or empty objects)
-5. Return ONLY valid JSON, no additional text or markdown formatting
+4. For percentage above buy price: If user says "10% above buy price" or "10% above this price", use percent_above_buy: 10 (NOT price_above)
+5. Set missing values to null (not empty strings or empty objects)
+6. Return ONLY valid JSON, no additional text or markdown formatting
+7. Ensure all JSON is properly closed with matching braces and brackets
 
 JSON:"""
 
+        content = None
         try:
             if self.use_gemini:
                 # Use Gemini API
@@ -242,7 +248,7 @@ JSON:"""
                 response = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=[
-                        {"role": "system", "content": "You are a helpful assistant that extracts structured data from stock-related text. Always return valid JSON only."},
+                        {"role": "system", "content": "You are a helpful assistant that extracts structured data from stock-related text. Always return valid JSON only. Do not include any explanatory text before or after the JSON."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.1,
@@ -250,10 +256,27 @@ JSON:"""
                 )
                 content = response.choices[0].message.content.strip()
             
+            if not content:
+                print("Error: Empty response from LLM API")
+                return self._default_result()
+            
             # Remove markdown code blocks if present
             content = re.sub(r'```json\s*', '', content)
             content = re.sub(r'```\s*', '', content)
             content = content.strip()
+            
+            # Try to extract JSON if there's extra text
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                content = json_match.group(0)
+            
+            # Try to fix common JSON issues before parsing
+            # Remove trailing commas before closing braces/brackets
+            content = re.sub(r',(\s*[}\]])', r'\1', content)
+            # Remove any text after the closing brace
+            brace_pos = content.rfind('}')
+            if brace_pos > 0:
+                content = content[:brace_pos + 1]
             
             # Parse JSON
             result = json.loads(content)
@@ -263,10 +286,26 @@ JSON:"""
             
         except json.JSONDecodeError as e:
             print(f"Error parsing LLM JSON response: {e}")
-            print(f"Response was: {content}")
+            if content:
+                print(f"Full response was:")
+                print("=" * 60)
+                print(content)
+                print("=" * 60)
+                print(f"Response length: {len(content)} characters")
+                # Try to fix common JSON issues
+                try:
+                    # Remove trailing commas before closing braces/brackets
+                    fixed_content = re.sub(r',(\s*[}\]])', r'\1', content)
+                    result = json.loads(fixed_content)
+                    print("Fixed JSON parsing issue (trailing comma)")
+                    return self._normalize_result(result)
+                except:
+                    pass
             return self._default_result()
         except Exception as e:
             print(f"Error calling LLM API: {e}")
+            import traceback
+            traceback.print_exc()
             return self._default_result()
 
     def _normalize_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -286,7 +325,7 @@ JSON:"""
         # Normalize condition values
         conditions = normalized["conditions"]
         for key in ["price_above", "price_below", "percent_change", "percent_drop", 
-                   "time_period_days", "reminder_days", "trailing_stop"]:
+                   "percent_above_buy", "time_period_days", "reminder_days", "trailing_stop"]:
             if key in conditions:
                 conditions[key] = self._safe_float(conditions[key])
         
