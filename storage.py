@@ -78,6 +78,39 @@ class Storage:
             rows = cursor.fetchall()
             return [StockNote.from_dict(dict(row)) for row in rows]
 
+    def get_all_notes(self, include_inactive: bool = True) -> List[StockNote]:
+        """Get all stock notes, optionally including inactive ones."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            if include_inactive:
+                cursor.execute("""
+                    SELECT * FROM stock_notes 
+                    ORDER BY created_at DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT * FROM stock_notes 
+                    WHERE active = 1
+                    ORDER BY created_at DESC
+                """)
+            rows = cursor.fetchall()
+            return [StockNote.from_dict(dict(row)) for row in rows]
+
+    def get_note_by_id(self, note_id: str) -> Optional[StockNote]:
+        """Get a specific note by ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM stock_notes 
+                WHERE id = ?
+            """, (note_id,))
+            row = cursor.fetchone()
+            if row:
+                return StockNote.from_dict(dict(row))
+            return None
+
     def update_last_checked(self, note_id: str):
         """Update the last_checked timestamp for a note."""
         with sqlite3.connect(self.db_path) as conn:

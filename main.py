@@ -66,6 +66,153 @@ def add_mode(text: Optional[str] = None):
         traceback.print_exc()
 
 
+def view_mode(include_inactive: bool = False, note_id: Optional[str] = None):
+    """Handle 'view' command - view database contents."""
+    try:
+        storage = Storage()
+        
+        if note_id:
+            # View specific note
+            note = storage.get_note_by_id(note_id)
+            if not note:
+                print(f"Note with ID '{note_id}' not found.")
+                return
+            
+            notes = [note]
+        else:
+            # View all notes
+            notes = storage.get_all_notes(include_inactive=include_inactive)
+        
+        if not notes:
+            print("No notes found in database.")
+            return
+        
+        # Use rich if available for better formatting
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.panel import Panel
+            from rich.text import Text
+            from rich import box
+            console = Console()
+            use_rich = True
+        except ImportError:
+            use_rich = False
+        
+        if use_rich:
+            # Display summary table
+            table = Table(title="Stock Notes Database", box=box.ROUNDED, show_header=True, header_style="bold magenta")
+            table.add_column("ID", style="cyan", width=36)
+            table.add_column("Symbol", style="yellow", width=10)
+            table.add_column("Action", style="green", width=10)
+            table.add_column("Buy Price", style="blue", width=12)
+            table.add_column("Created", style="dim", width=19)
+            table.add_column("Status", style="bold", width=8)
+            
+            for note in notes:
+                status = "✓ Active" if note.active else "✗ Inactive"
+                status_style = "green" if note.active else "red"
+                buy_price_str = f"${note.buy_price:.2f}" if note.buy_price else "N/A"
+                created_str = note.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                
+                table.add_row(
+                    note.id[:8] + "...",
+                    note.symbol or "N/A",
+                    note.action_type or "N/A",
+                    buy_price_str,
+                    created_str,
+                    Text(status, style=status_style)
+                )
+            
+            console.print(table)
+            console.print()
+            
+            # Display detailed information for each note
+            for i, note in enumerate(notes, 1):
+                content = Text()
+                content.append(f"Note {i} of {len(notes)}\n\n", style="bold")
+                content.append("ID: ", style="bold")
+                content.append(f"{note.id}\n", style="cyan")
+                content.append("Raw Text: ", style="bold")
+                content.append(f"{note.raw_text}\n\n", style="white")
+                
+                if note.symbol:
+                    content.append("Symbol: ", style="bold")
+                    content.append(f"{note.symbol}\n", style="yellow")
+                if note.action_type:
+                    content.append("Action Type: ", style="bold")
+                    content.append(f"{note.action_type}\n", style="green")
+                if note.buy_price:
+                    content.append("Buy Price: ", style="bold")
+                    content.append(f"${note.buy_price:.2f}\n", style="blue")
+                
+                if note.conditions:
+                    content.append("\nConditions:\n", style="bold")
+                    for key, value in note.conditions.items():
+                        if value is not None:
+                            content.append(f"  • {key}: {value}\n", style="white")
+                
+                if note.user_opinion:
+                    content.append("\nUser Opinion: ", style="bold")
+                    content.append(f"{note.user_opinion}\n", style="italic dim")
+                
+                content.append(f"\nCreated: {note.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n", style="dim")
+                if note.last_checked:
+                    content.append(f"Last Checked: {note.last_checked.strftime('%Y-%m-%d %H:%M:%S')}\n", style="dim")
+                content.append(f"Status: ", style="bold")
+                status_text = "Active" if note.active else "Inactive"
+                status_style = "green" if note.active else "red"
+                content.append(status_text, style=status_style)
+                
+                panel = Panel(
+                    content,
+                    title=f"[bold]Note Details[/bold]",
+                    border_style="blue",
+                    box=box.ROUNDED,
+                    padding=(1, 2)
+                )
+                console.print(panel)
+                console.print()
+        else:
+            # Plain text output
+            print(f"\n{'='*80}")
+            print(f"STOCK NOTES DATABASE - {len(notes)} note(s) found")
+            print(f"{'='*80}\n")
+            
+            for i, note in enumerate(notes, 1):
+                print(f"{'─'*80}")
+                print(f"Note {i} of {len(notes)}")
+                print(f"{'─'*80}")
+                print(f"ID: {note.id}")
+                print(f"Status: {'✓ Active' if note.active else '✗ Inactive'}")
+                print(f"Symbol: {note.symbol or 'N/A'}")
+                print(f"Action Type: {note.action_type or 'N/A'}")
+                print(f"Buy Price: ${note.buy_price:.2f}" if note.buy_price else "Buy Price: N/A")
+                print(f"Created: {note.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+                if note.last_checked:
+                    print(f"Last Checked: {note.last_checked.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"\nRaw Text:")
+                print(f"  {note.raw_text}")
+                
+                if note.conditions:
+                    print(f"\nConditions:")
+                    for key, value in note.conditions.items():
+                        if value is not None:
+                            print(f"  • {key}: {value}")
+                
+                if note.user_opinion:
+                    print(f"\nUser Opinion: {note.user_opinion}")
+                
+                print()
+            
+            print(f"{'='*80}\n")
+        
+    except Exception as e:
+        print(f"\n✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def check_mode():
     """Handle 'check' command - check all active notes and show alerts."""
     print("Checking stock conditions...\n")
@@ -136,6 +283,19 @@ def main():
         help="Provider to list models for (default: uses configured provider)"
     )
     
+    # View command
+    view_parser = subparsers.add_parser("view", help="View all notes in the database")
+    view_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Include inactive notes (default: only active notes)"
+    )
+    view_parser.add_argument(
+        "--id",
+        type=str,
+        help="View a specific note by ID"
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -148,6 +308,8 @@ def main():
         check_mode()
     elif args.command == "list-models":
         list_available_models(args.provider)
+    elif args.command == "view":
+        view_mode(include_inactive=args.all, note_id=args.id)
     else:
         parser.print_help()
 

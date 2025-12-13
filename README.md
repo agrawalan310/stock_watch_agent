@@ -75,6 +75,27 @@ This will:
 4. Display alerts for any conditions that are met
 5. Update last_checked timestamps
 
+### View Database Contents
+
+```bash
+# View all active notes
+python main.py view
+
+# View all notes including inactive ones
+python main.py view --all
+
+# View a specific note by ID
+python main.py view --id "note-uuid-here"
+```
+
+This displays all information stored in the database including:
+- Note ID, symbol, action type, buy price
+- Raw text input
+- Parsed conditions
+- User opinion
+- Creation and last checked timestamps
+- Active/inactive status
+
 ## Examples
 
 The agent understands various types of stock-related notes:
