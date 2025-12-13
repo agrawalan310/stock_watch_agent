@@ -4,13 +4,14 @@ A Python-based personal stock monitoring assistant that accepts plain English no
 
 ## Features
 
+- 🌐 **Web UI (Streamlit)**: Beautiful, interactive web interface for all operations
 - 📝 Accept free-form text notes about stock actions and monitoring rules
 - 🤖 Use LLM to extract structured data (symbol, action type, prices, conditions)
 - 💾 Store notes in SQLite database with timestamps
 - 📊 Fetch real-time stock prices using yfinance
 - 🔔 Evaluate price-based and time-based conditions
-- 🚨 Display bold/highlighted console alerts when conditions are met
-- ⚡ Simple CLI interface for adding notes and checking conditions
+- 🚨 Display alerts when conditions are met
+- ⚡ CLI interface also available for command-line usage
 
 ## Installation
 
@@ -19,6 +20,17 @@ A Python-based personal stock monitoring assistant that accepts plain English no
 2. Install dependencies:
 ```bash
 pip install -r requirements.txt
+```
+
+3. Run the Streamlit web UI (recommended):
+```bash
+streamlit run app.py
+```
+
+Or use the CLI interface:
+```bash
+python main.py add
+python main.py check
 ```
 
 3. Set up your Google Gemini API key (default, recommended):
@@ -45,6 +57,22 @@ $env:OPENAI_MODEL="gpt-4o-mini"
 ```
 
 ## Usage
+
+### Web UI (Streamlit) - Recommended
+
+Launch the web interface:
+```bash
+streamlit run app.py
+```
+
+The web UI provides:
+- **Home**: Dashboard with statistics and recent notes
+- **Add Note**: Easy-to-use form to add stock notes with AI parsing
+- **View Notes**: Interactive table and detailed view of all notes
+- **Check Alerts**: One-click button to check all conditions and see alerts
+- **Delete Notes**: Safe deletion interface with confirmations
+
+### CLI Interface
 
 ### Add a Stock Note
 
