@@ -1,0 +1,323 @@
+"""LLM-based parser for extracting structured data from user text."""
+import json
+import re
+from typing import Optional, Dict, Any
+
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+    genai = None
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+
+import config
+
+
+def list_available_models(provider: Optional[str] = None) -> None:
+    """
+    List all available models for the specified provider.
+    
+    Args:
+        provider: "gemini" or "openai". If None, uses config.LLM_PROVIDER
+    """
+    if provider is None:
+        provider = config.LLM_PROVIDER.lower()
+    else:
+        provider = provider.lower()
+    
+    print(f"\nListing available models for {provider.upper()}...\n")
+    
+    if provider == "gemini":
+        if not GEMINI_AVAILABLE:
+            print("Error: google-generativeai package not installed.")
+            print("Install it with: pip install google-generativeai")
+            return
+        
+        if not config.GEMINI_API_KEY:
+            print("Error: GEMINI_API_KEY not set.")
+            return
+        
+        try:
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            models = genai.list_models()
+            
+            print("Available Gemini models that support generateContent:\n")
+            models_found = False
+            for model in models:
+                if 'generateContent' in model.supported_generation_methods:
+                    models_found = True
+                    model_name = model.name.replace('models/', '')
+                    print(f"  ✓ {model_name}")
+                    if hasattr(model, 'display_name') and model.display_name:
+                        print(f"    Display Name: {model.display_name}")
+                    if hasattr(model, 'description') and model.description:
+                        print(f"    Description: {model.description}")
+                    print()
+            
+            if not models_found:
+                print("  No models found that support generateContent.")
+            
+            print("\nTo use a model, set GEMINI_MODEL environment variable or update config.py")
+            print(f"Example: $env:GEMINI_MODEL=\"{model_name}\"")
+            
+        except Exception as e:
+            print(f"Error listing models: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    elif provider == "openai":
+        if not OPENAI_AVAILABLE:
+            print("Error: openai package not installed.")
+            print("Install it with: pip install openai")
+            return
+        
+        if not config.OPENAI_API_KEY:
+            print("Error: OPENAI_API_KEY not set.")
+            return
+        
+        try:
+            client = OpenAI(api_key=config.OPENAI_API_KEY, base_url=config.OPENAI_API_BASE)
+            models = client.models.list()
+            
+            print("Available OpenAI models:\n")
+            for model in models.data:
+                model_id = model.id
+                # Filter to show common GPT models
+                if any(x in model_id.lower() for x in ['gpt', 'text', 'davinci', 'curie', 'babbage', 'ada']):
+                    print(f"  ✓ {model_id}")
+                    if hasattr(model, 'created') and model.created:
+                        from datetime import datetime
+                        created = datetime.fromtimestamp(model.created)
+                        print(f"    Created: {created.strftime('%Y-%m-%d')}")
+                    print()
+            
+            print("\nTo use a model, set OPENAI_MODEL environment variable or update config.py")
+            print(f"Example: $env:OPENAI_MODEL=\"gpt-4o-mini\"")
+            
+        except Exception as e:
+            print(f"Error listing models: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    else:
+        print(f"Unknown provider: {provider}. Use 'gemini' or 'openai'.")
+
+
+class LLMParser:
+    """Parses user text using LLM to extract structured stock information."""
+
+    def __init__(self):
+        """Initialize LLM parser."""
+        self.provider = config.LLM_PROVIDER.lower()
+        
+        if self.provider == "gemini":
+            if not config.GEMINI_API_KEY:
+                raise ValueError("GEMINI_API_KEY not set. Please set GEMINI_API_KEY environment variable.")
+            
+            if not GEMINI_AVAILABLE:
+                raise ImportError("google-generativeai package not installed. Install it with: pip install google-generativeai")
+            
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            self.model_name = config.GEMINI_MODEL
+            
+            # Try to create the model and handle errors gracefully
+            try:
+                self.client = genai.GenerativeModel(self.model_name)
+                self.use_gemini = True
+            except Exception as e:
+                # If model not found, try common alternatives
+                print(f"Warning: Model '{self.model_name}' not available. Trying alternatives...")
+                alternative_models = ["gemini-pro", "gemini-1.5-pro", "models/gemini-pro"]
+                model_found = False
+                for alt_model in alternative_models:
+                    try:
+                        self.client = genai.GenerativeModel(alt_model)
+                        self.model_name = alt_model
+                        self.use_gemini = True
+                        model_found = True
+                        print(f"Using model: {alt_model}")
+                        break
+                    except:
+                        continue
+                
+                if not model_found:
+                    # List available models
+                    print("\n" + "="*60)
+                    print("Could not initialize the specified model.")
+                    print("="*60)
+                    try:
+                        list_available_models("gemini")
+                    except:
+                        pass
+                    raise ValueError(f"Could not initialize Gemini model '{self.model_name}'. Error: {e}")
+            
+        elif self.provider == "openai":
+            if not config.OPENAI_API_KEY:
+                raise ValueError("OPENAI_API_KEY not set. Please set OPENAI_API_KEY environment variable.")
+            
+            if not OPENAI_AVAILABLE:
+                raise ImportError("openai package not installed. Install it with: pip install openai")
+            
+            self.client = OpenAI(
+                api_key=config.OPENAI_API_KEY,
+                base_url=config.OPENAI_API_BASE
+            )
+            self.model_name = config.OPENAI_MODEL
+            self.use_gemini = False
+        else:
+            raise ValueError(f"Unknown LLM provider: {self.provider}. Use 'gemini' or 'openai'.")
+
+    def parse(self, text: str) -> Dict[str, Any]:
+        """
+        Parse user text and extract structured data.
+        
+        Returns a dictionary with:
+        - symbol: Stock ticker symbol (normalized, e.g., "NVDA", "AAPL")
+        - action_type: One of "buy", "hold", "watch", "sell", "review", "unknown"
+        - buy_price: Purchase price if mentioned (float or None)
+        - conditions: Dictionary of conditions (price thresholds, time periods, etc.)
+        - user_opinion: User's opinion or notes (string or None)
+        """
+        prompt = f"""You are a stock monitoring assistant. Extract structured information from the following user text about stocks.
+
+User text: "{text}"
+
+Extract and return ONLY valid JSON with the following structure:
+{{
+    "symbol": "TICKER_SYMBOL" or null,
+    "action_type": "buy" | "hold" | "watch" | "sell" | "review" | "unknown" or null,
+    "buy_price": number or null,
+    "conditions": {{
+        "price_above": number or null,
+        "price_below": number or null,
+        "price_between": {{"min": number, "max": number}} or null,
+        "percent_change": number or null,
+        "percent_drop": number or null,
+        "time_period_days": number or null,
+        "reminder_days": number or null,
+        "trailing_stop": number or null
+    }},
+    "user_opinion": "string" or null
+}}
+
+Rules:
+1. Normalize stock symbols to uppercase (e.g., "nvidia" -> "NVDA", "Apple" -> "AAPL")
+2. Extract buy_price if user mentions purchasing price
+3. Extract conditions from phrases like:
+   - "crosses 200$" -> price_above: 200
+   - "goes below 65$" -> price_below: 65
+   - "between 300 and 310" -> price_between: {{"min": 300, "max": 310}}
+   - "falls more than 15%" -> percent_drop: 15
+   - "in 3 months" -> reminder_days: 90
+   - "after a month" -> time_period_days: 30
+   - "trailing stop loss at 300" -> trailing_stop: 300
+4. Set missing values to null (not empty strings or empty objects)
+5. Return ONLY valid JSON, no additional text or markdown formatting
+
+JSON:"""
+
+        try:
+            if self.use_gemini:
+                # Use Gemini API
+                full_prompt = f"""You are a helpful assistant that extracts structured data from stock-related text. Always return valid JSON only.
+
+{prompt}"""
+                
+                response = self.client.generate_content(
+                    full_prompt,
+                    generation_config={
+                        "temperature": 0.1,
+                        "max_output_tokens": 500,
+                    }
+                )
+                content = response.text.strip()
+            else:
+                # Use OpenAI API
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that extracts structured data from stock-related text. Always return valid JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=500
+                )
+                content = response.choices[0].message.content.strip()
+            
+            # Remove markdown code blocks if present
+            content = re.sub(r'```json\s*', '', content)
+            content = re.sub(r'```\s*', '', content)
+            content = content.strip()
+            
+            # Parse JSON
+            result = json.loads(content)
+            
+            # Validate and normalize
+            return self._normalize_result(result)
+            
+        except json.JSONDecodeError as e:
+            print(f"Error parsing LLM JSON response: {e}")
+            print(f"Response was: {content}")
+            return self._default_result()
+        except Exception as e:
+            print(f"Error calling LLM API: {e}")
+            return self._default_result()
+
+    def _normalize_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize and validate the parsed result."""
+        normalized = {
+            "symbol": self._normalize_symbol(result.get("symbol")),
+            "action_type": result.get("action_type"),
+            "buy_price": self._safe_float(result.get("buy_price")),
+            "conditions": result.get("conditions") or {},
+            "user_opinion": result.get("user_opinion")
+        }
+        
+        # Ensure conditions is a dict
+        if not isinstance(normalized["conditions"], dict):
+            normalized["conditions"] = {}
+        
+        # Normalize condition values
+        conditions = normalized["conditions"]
+        for key in ["price_above", "price_below", "percent_change", "percent_drop", 
+                   "time_period_days", "reminder_days", "trailing_stop"]:
+            if key in conditions:
+                conditions[key] = self._safe_float(conditions[key])
+        
+        return normalized
+
+    def _normalize_symbol(self, symbol: Optional[str]) -> Optional[str]:
+        """Normalize stock symbol to uppercase."""
+        if not symbol:
+            return None
+        # Remove common prefixes/suffixes and normalize
+        symbol = symbol.upper().strip()
+        # Remove $ if present
+        symbol = symbol.replace("$", "")
+        return symbol if symbol else None
+
+    def _safe_float(self, value: Any) -> Optional[float]:
+        """Safely convert value to float."""
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    def _default_result(self) -> Dict[str, Any]:
+        """Return default result when parsing fails."""
+        return {
+            "symbol": None,
+            "action_type": None,
+            "buy_price": None,
+            "conditions": {},
+            "user_opinion": None
+        }
+
