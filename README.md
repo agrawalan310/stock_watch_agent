@@ -96,6 +96,27 @@ This displays all information stored in the database including:
 - Creation and last checked timestamps
 - Active/inactive status
 
+### Delete Notes
+
+```bash
+# Delete a specific note by ID
+python main.py delete --id "note-uuid-here"
+
+# Delete all notes for a specific symbol
+python main.py delete --symbol "AAPL"
+
+# Delete all inactive notes
+python main.py delete --all-inactive
+
+# Delete ALL notes (use with caution!)
+python main.py delete --all
+
+# Skip confirmation prompt (use with --confirm)
+python main.py delete --id "note-uuid-here" --confirm
+```
+
+**Note:** By default, delete operations will prompt for confirmation. Use `--confirm` to skip the confirmation prompt.
+
 ## Examples
 
 The agent understands various types of stock-related notes:

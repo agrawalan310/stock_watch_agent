@@ -133,3 +133,62 @@ class Storage:
             """, (note_id,))
             conn.commit()
 
+    def delete_note(self, note_id: str) -> bool:
+        """Delete a note by ID. Returns True if deleted, False if not found."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM stock_notes 
+                    WHERE id = ?
+                """, (note_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error deleting note: {e}")
+            return False
+
+    def delete_all_inactive(self) -> int:
+        """Delete all inactive notes. Returns the number of notes deleted."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM stock_notes 
+                    WHERE active = 0
+                """)
+                conn.commit()
+                return cursor.rowcount
+        except sqlite3.Error as e:
+            print(f"Error deleting inactive notes: {e}")
+            return 0
+
+    def delete_all_notes(self) -> int:
+        """Delete all notes. Returns the number of notes deleted."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM stock_notes
+                """)
+                conn.commit()
+                return cursor.rowcount
+        except sqlite3.Error as e:
+            print(f"Error deleting all notes: {e}")
+            return 0
+
+    def delete_notes_by_symbol(self, symbol: str) -> int:
+        """Delete all notes for a specific symbol. Returns the number of notes deleted."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM stock_notes 
+                    WHERE symbol = ?
+                """, (symbol.upper(),))
+                conn.commit()
+                return cursor.rowcount
+        except sqlite3.Error as e:
+            print(f"Error deleting notes by symbol: {e}")
+            return 0
+

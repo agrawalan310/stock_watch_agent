@@ -213,6 +213,106 @@ def view_mode(include_inactive: bool = False, note_id: Optional[str] = None):
         traceback.print_exc()
 
 
+def delete_mode(note_id: Optional[str] = None, symbol: Optional[str] = None, 
+                all_inactive: bool = False, all_notes: bool = False, 
+                confirm: bool = False):
+    """Handle 'delete' command - delete notes from database."""
+    try:
+        storage = Storage()
+        
+        if all_notes:
+            # Delete all notes
+            if not confirm:
+                response = input("\n⚠️  WARNING: This will delete ALL notes. Are you sure? (yes/no): ")
+                if response.lower() not in ['yes', 'y']:
+                    print("Deletion cancelled.")
+                    return
+            
+            count = storage.delete_all_notes()
+            if count > 0:
+                print(f"\n✓ Successfully deleted {count} note(s).")
+            else:
+                print("\nNo notes found to delete.")
+            return
+        
+        if all_inactive:
+            # Delete all inactive notes
+            if not confirm:
+                response = input("\n⚠️  This will delete all inactive notes. Continue? (yes/no): ")
+                if response.lower() not in ['yes', 'y']:
+                    print("Deletion cancelled.")
+                    return
+            
+            count = storage.delete_all_inactive()
+            if count > 0:
+                print(f"\n✓ Successfully deleted {count} inactive note(s).")
+            else:
+                print("\nNo inactive notes found.")
+            return
+        
+        if symbol:
+            # Delete notes by symbol
+            notes = storage.get_all_notes(include_inactive=True)
+            matching_notes = [n for n in notes if n.symbol and n.symbol.upper() == symbol.upper()]
+            
+            if not matching_notes:
+                print(f"\nNo notes found for symbol '{symbol}'.")
+                return
+            
+            if not confirm:
+                print(f"\nFound {len(matching_notes)} note(s) for symbol '{symbol}':")
+                for note in matching_notes:
+                    print(f"  - {note.id[:8]}... | {note.raw_text[:50]}...")
+                response = input(f"\nDelete these {len(matching_notes)} note(s)? (yes/no): ")
+                if response.lower() not in ['yes', 'y']:
+                    print("Deletion cancelled.")
+                    return
+            
+            count = storage.delete_notes_by_symbol(symbol)
+            if count > 0:
+                print(f"\n✓ Successfully deleted {count} note(s) for symbol '{symbol}'.")
+            else:
+                print(f"\nNo notes deleted for symbol '{symbol}'.")
+            return
+        
+        if note_id:
+            # Delete specific note by ID
+            note = storage.get_note_by_id(note_id)
+            if not note:
+                print(f"\nNote with ID '{note_id}' not found.")
+                return
+            
+            if not confirm:
+                print(f"\nNote to delete:")
+                print(f"  ID: {note.id}")
+                print(f"  Symbol: {note.symbol or 'N/A'}")
+                print(f"  Text: {note.raw_text[:100]}...")
+                response = input("\nDelete this note? (yes/no): ")
+                if response.lower() not in ['yes', 'y']:
+                    print("Deletion cancelled.")
+                    return
+            
+            if storage.delete_note(note_id):
+                print(f"\n✓ Successfully deleted note '{note_id}'.")
+            else:
+                print(f"\n✗ Error deleting note '{note_id}'.")
+            return
+        
+        # If no specific option provided, show help
+        print("\nError: Please specify what to delete.")
+        print("Options:")
+        print("  --id <note-id>        Delete a specific note by ID")
+        print("  --symbol <SYMBOL>     Delete all notes for a symbol")
+        print("  --all-inactive        Delete all inactive notes")
+        print("  --all                 Delete all notes (use with caution!)")
+        print("  --confirm             Skip confirmation prompt")
+        
+    except Exception as e:
+        print(f"\n✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def check_mode():
     """Handle 'check' command - check all active notes and show alerts."""
     print("Checking stock conditions...\n")
@@ -296,6 +396,37 @@ def main():
         help="View a specific note by ID"
     )
     
+    # Delete command
+    delete_parser = subparsers.add_parser("delete", help="Delete notes from the database")
+    delete_group = delete_parser.add_mutually_exclusive_group(required=False)
+    delete_group.add_argument(
+        "--id",
+        type=str,
+        dest="delete_id",
+        help="Delete a specific note by ID"
+    )
+    delete_group.add_argument(
+        "--symbol",
+        type=str,
+        help="Delete all notes for a specific symbol"
+    )
+    delete_group.add_argument(
+        "--all-inactive",
+        action="store_true",
+        help="Delete all inactive notes"
+    )
+    delete_group.add_argument(
+        "--all",
+        action="store_true",
+        dest="delete_all",
+        help="Delete ALL notes (use with caution!)"
+    )
+    delete_parser.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Skip confirmation prompt"
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -310,6 +441,15 @@ def main():
         list_available_models(args.provider)
     elif args.command == "view":
         view_mode(include_inactive=args.all, note_id=args.id)
+    elif args.command == "delete":
+        # Handle delete command arguments
+        delete_mode(
+            note_id=getattr(args, 'delete_id', None),
+            symbol=getattr(args, 'symbol', None),
+            all_inactive=getattr(args, 'all_inactive', False),
+            all_notes=getattr(args, 'delete_all', False),
+            confirm=getattr(args, 'confirm', False)
+        )
     else:
         parser.print_help()
 
