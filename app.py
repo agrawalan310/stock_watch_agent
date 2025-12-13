@@ -248,7 +248,7 @@ def show_view_notes():
     
     st.write(f"**Found {len(all_notes)} note(s)**")
     
-    # Display as table
+    # Display as table with action buttons
     st.subheader("Notes Table")
     
     # Prepare data for table
@@ -268,6 +268,27 @@ def show_view_notes():
     
     df = pd.DataFrame(table_data)
     st.dataframe(df, use_container_width=True, hide_index=True)
+    
+    # Quick activate/deactivate section
+    st.markdown("---")
+    st.subheader("Quick Actions")
+    
+    # Separate active and inactive notes
+    active_notes = [n for n in all_notes if n.active]
+    inactive_notes = [n for n in all_notes if not n.active]
+    
+    if inactive_notes:
+        st.write(f"**Inactive Notes ({len(inactive_notes)}):**")
+        cols = st.columns(min(3, len(inactive_notes)))
+        for idx, note in enumerate(inactive_notes[:3]):
+            with cols[idx % 3]:
+                if st.button(f"Activate: {note.symbol or 'N/A'}", key=f"quick_activate_{note.id}"):
+                    storage.activate_note(note.id)
+                    st.success(f"Note {note.symbol or note.id[:8]} activated!")
+                    st.rerun()
+        
+        if len(inactive_notes) > 3:
+            st.caption(f"... and {len(inactive_notes) - 3} more inactive notes. Use detailed view to activate them.")
     
     # Detailed view
     st.markdown("---")
@@ -313,6 +334,19 @@ def show_view_notes():
         if note.user_opinion:
             st.write("**User Opinion:**")
             st.write(note.user_opinion)
+        
+        # Activate/Deactivate button
+        st.markdown("---")
+        if note.active:
+            if st.button("Deactivate Note", key=f"deactivate_{note.id}"):
+                storage.deactivate_note(note.id)
+                st.success("Note deactivated!")
+                st.rerun()
+        else:
+            if st.button("Activate Note", key=f"activate_{note.id}", type="primary"):
+                storage.activate_note(note.id)
+                st.success("Note activated!")
+                st.rerun()
 
 
 def show_check_alerts():
@@ -340,13 +374,21 @@ def show_check_alerts():
                 # Evaluate all notes
                 alerts = evaluator.evaluate_all(notes)
                 
-                # Update last_checked timestamps
+                # Update last_checked timestamps and deactivate notes that triggered alerts
                 for note in notes:
                     storage.update_last_checked(note.id)
+                
+                # Deactivate notes that triggered alerts
+                deactivated_count = 0
+                if alerts:
+                    for alert in alerts:
+                        storage.deactivate_note(alert['note_id'])
+                        deactivated_count += 1
                 
                 # Display results
                 if alerts:
                     st.success(f"🚨 Found {len(alerts)} alert(s)!")
+                    st.info(f"ℹ️ {deactivated_count} note(s) have been automatically deactivated.")
                     
                     for i, alert in enumerate(alerts, 1):
                         with st.container():

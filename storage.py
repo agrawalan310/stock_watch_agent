@@ -133,6 +133,17 @@ class Storage:
             """, (note_id,))
             conn.commit()
 
+    def activate_note(self, note_id: str):
+        """Activate a note."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE stock_notes 
+                SET active = 1
+                WHERE id = ?
+            """, (note_id,))
+            conn.commit()
+
     def delete_note(self, note_id: str) -> bool:
         """Delete a note by ID. Returns True if deleted, False if not found."""
         try:

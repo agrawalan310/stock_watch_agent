@@ -102,6 +102,7 @@ This will:
 3. Evaluate all conditions
 4. Display alerts for any conditions that are met
 5. Update last_checked timestamps
+6. **Automatically deactivate notes that triggered alerts** (you can reactivate them later)
 
 ### View Database Contents
 
@@ -144,6 +145,21 @@ python main.py delete --id "note-uuid-here" --confirm
 ```
 
 **Note:** By default, delete operations will prompt for confirmation. Use `--confirm` to skip the confirmation prompt.
+
+### Activate Notes
+
+```bash
+# Activate a specific note by ID
+python main.py activate --id "note-uuid-here"
+
+# Activate all inactive notes for a specific symbol
+python main.py activate --symbol "AAPL"
+
+# Activate all inactive notes
+python main.py activate --all-inactive
+```
+
+**Note:** When alerts are triggered during `check`, notes are automatically deactivated. Use the `activate` command to reactivate them.
 
 ## Examples
 

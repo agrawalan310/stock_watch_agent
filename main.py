@@ -213,6 +213,70 @@ def view_mode(include_inactive: bool = False, note_id: Optional[str] = None):
         traceback.print_exc()
 
 
+def activate_mode(note_id: Optional[str] = None, symbol: Optional[str] = None,
+                   all_inactive: bool = False):
+    """Handle 'activate' command - activate notes in database."""
+    try:
+        storage = Storage()
+        
+        if all_inactive:
+            # Activate all inactive notes
+            inactive_notes = storage.get_all_notes(include_inactive=True)
+            inactive_notes = [n for n in inactive_notes if not n.active]
+            
+            if not inactive_notes:
+                print("\nNo inactive notes found.")
+                return
+            
+            for note in inactive_notes:
+                storage.activate_note(note.id)
+            
+            print(f"\n✓ Successfully activated {len(inactive_notes)} note(s).")
+            return
+        
+        if symbol:
+            # Activate notes by symbol
+            all_notes = storage.get_all_notes(include_inactive=True)
+            matching_notes = [n for n in all_notes if n.symbol and n.symbol.upper() == symbol.upper() and not n.active]
+            
+            if not matching_notes:
+                print(f"\nNo inactive notes found for symbol '{symbol}'.")
+                return
+            
+            for note in matching_notes:
+                storage.activate_note(note.id)
+            
+            print(f"\n✓ Successfully activated {len(matching_notes)} note(s) for symbol '{symbol}'.")
+            return
+        
+        if note_id:
+            # Activate specific note by ID
+            note = storage.get_note_by_id(note_id)
+            if not note:
+                print(f"\nNote with ID '{note_id}' not found.")
+                return
+            
+            if note.active:
+                print(f"\nNote '{note_id}' is already active.")
+                return
+            
+            storage.activate_note(note_id)
+            print(f"\n✓ Successfully activated note '{note_id}'.")
+            return
+        
+        # If no specific option provided, show help
+        print("\nError: Please specify what to activate.")
+        print("Options:")
+        print("  --id <note-id>        Activate a specific note by ID")
+        print("  --symbol <SYMBOL>     Activate all inactive notes for a symbol")
+        print("  --all-inactive        Activate all inactive notes")
+        
+    except Exception as e:
+        print(f"\n✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def delete_mode(note_id: Optional[str] = None, symbol: Optional[str] = None, 
                 all_inactive: bool = False, all_notes: bool = False, 
                 confirm: bool = False):
@@ -339,12 +403,19 @@ def check_mode():
         # Show alerts
         notifier.show_alerts(alerts)
         
-        # Update last_checked timestamps
+        # Update last_checked timestamps and deactivate notes that triggered alerts
         for note in notes:
             storage.update_last_checked(note.id)
         
+        # Deactivate notes that triggered alerts
+        if alerts:
+            for alert in alerts:
+                storage.deactivate_note(alert['note_id'])
+                print(f"Note {alert['note_id'][:8]}... has been deactivated after alert.")
+        
         if alerts:
             print(f"\n✓ Checked {len(notes)} note(s), {len(alerts)} alert(s) triggered.")
+            print(f"  {len(alerts)} note(s) have been deactivated.")
         else:
             print(f"\n✓ Checked {len(notes)} note(s), no alerts.")
             
@@ -396,6 +467,26 @@ def main():
         help="View a specific note by ID"
     )
     
+    # Activate command
+    activate_parser = subparsers.add_parser("activate", help="Activate notes in the database")
+    activate_group = activate_parser.add_mutually_exclusive_group(required=False)
+    activate_group.add_argument(
+        "--id",
+        type=str,
+        dest="activate_id",
+        help="Activate a specific note by ID"
+    )
+    activate_group.add_argument(
+        "--symbol",
+        type=str,
+        help="Activate all inactive notes for a specific symbol"
+    )
+    activate_group.add_argument(
+        "--all-inactive",
+        action="store_true",
+        help="Activate all inactive notes"
+    )
+    
     # Delete command
     delete_parser = subparsers.add_parser("delete", help="Delete notes from the database")
     delete_group = delete_parser.add_mutually_exclusive_group(required=False)
@@ -441,6 +532,12 @@ def main():
         list_available_models(args.provider)
     elif args.command == "view":
         view_mode(include_inactive=args.all, note_id=args.id)
+    elif args.command == "activate":
+        activate_mode(
+            note_id=getattr(args, 'activate_id', None),
+            symbol=getattr(args, 'symbol', None),
+            all_inactive=getattr(args, 'all_inactive', False)
+        )
     elif args.command == "delete":
         # Handle delete command arguments
         delete_mode(
