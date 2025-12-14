@@ -27,7 +27,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "gemini" or "openai"
 # Never commit your API key to the repository!
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Common working models: "gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash-latest"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-pro")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # OpenAI configuration (optional)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
