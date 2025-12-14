@@ -22,18 +22,16 @@ A Python-based personal stock monitoring assistant that accepts plain English no
 pip install -r requirements.txt
 ```
 
-3. Run the Streamlit web UI (recommended):
+3. Set up your API key (required):
+
+**Option 1: Using .env file (Recommended)**
 ```bash
-streamlit run app.py
+# Create a .env file in the project root
+# Copy the example (if provided) or create one with:
+GEMINI_API_KEY=your-gemini-api-key-here
 ```
 
-Or use the CLI interface:
-```bash
-python main.py add
-python main.py check
-```
-
-3. Set up your Google Gemini API key (default, recommended):
+**Option 2: Environment variable**
 ```bash
 # Windows PowerShell
 $env:GEMINI_API_KEY="your-gemini-api-key-here"
@@ -45,15 +43,32 @@ set GEMINI_API_KEY=your-gemini-api-key-here
 export GEMINI_API_KEY="your-gemini-api-key-here"
 ```
 
-Get your free Gemini API key from: https://makersuite.google.com/app/apikey
+**Option 3: Interactive prompt**
+- When you run the app, it will prompt you to enter the API key if not set
+- In Streamlit UI, you can enter it directly in the interface
+
+**Get your free Gemini API key from:** https://makersuite.google.com/app/apikey
+
+**⚠️ Important:** Never commit your API key to the repository! The `.env` file is already in `.gitignore`.
 
 **Optional: Use OpenAI instead of Gemini:**
 ```bash
-# Set provider to OpenAI
-$env:LLM_PROVIDER="openai"
-$env:OPENAI_API_KEY="your-openai-api-key-here"
-$env:OPENAI_API_BASE="https://api.openai.com/v1"
-$env:OPENAI_MODEL="gpt-4o-mini"
+# In .env file or environment variables:
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_API_BASE=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+```
+
+4. Run the Streamlit web UI (recommended):
+```bash
+streamlit run app.py
+```
+
+Or use the CLI interface:
+```bash
+python main.py add
+python main.py check
 ```
 
 ## Usage

@@ -10,6 +10,7 @@ from market_data import MarketData
 from evaluator import Evaluator
 from notifier import Notifier
 from models import StockNote
+import config
 
 # Page configuration
 st.set_page_config(
@@ -127,8 +128,54 @@ def show_add_note():
     
     # Check if parser is available
     if st.session_state.parser is None:
-        st.error(f"⚠️ LLM Parser not available: {st.session_state.get('parser_error', 'Unknown error')}")
-        st.info("Please check your API key configuration in config.py or environment variables.")
+        error_msg = st.session_state.get('parser_error', 'Unknown error')
+        st.error(f"⚠️ LLM Parser not available: {error_msg}")
+        
+        # Show API key setup instructions
+        st.markdown("---")
+        st.subheader("API Key Setup")
+        
+        provider = config.LLM_PROVIDER.lower()
+        if provider == "gemini":
+            st.markdown("""
+            **To use Gemini API:**
+            1. Get your free API key from: https://makersuite.google.com/app/apikey
+            2. Set it using one of these methods:
+               - **Environment variable:** `$env:GEMINI_API_KEY="your-key"`
+               - **Create a .env file** in the project root with: `GEMINI_API_KEY=your-key`
+               - **Enter it below** (temporary, for this session only)
+            """)
+            
+            api_key_input = st.text_input("Enter Gemini API Key (optional, for this session only):", type="password")
+            if st.button("Set API Key"):
+                if api_key_input:
+                    import os
+                    os.environ["GEMINI_API_KEY"] = api_key_input
+                    st.success("API key set! Please refresh the page or restart the app.")
+                    st.rerun()
+                else:
+                    st.error("Please enter a valid API key.")
+        
+        elif provider == "openai":
+            st.markdown("""
+            **To use OpenAI API:**
+            1. Get your API key from: https://platform.openai.com/api-keys
+            2. Set it using one of these methods:
+               - **Environment variable:** `$env:OPENAI_API_KEY="your-key"`
+               - **Create a .env file** in the project root with: `OPENAI_API_KEY=your-key`
+               - **Enter it below** (temporary, for this session only)
+            """)
+            
+            api_key_input = st.text_input("Enter OpenAI API Key (optional, for this session only):", type="password")
+            if st.button("Set API Key"):
+                if api_key_input:
+                    import os
+                    os.environ["OPENAI_API_KEY"] = api_key_input
+                    st.success("API key set! Please refresh the page or restart the app.")
+                    st.rerun()
+                else:
+                    st.error("Please enter a valid API key.")
+        
         return
     
     # Example notes

@@ -1,6 +1,7 @@
 """LLM-based parser for extracting structured data from user text."""
 import json
 import re
+import os
 from typing import Optional, Dict, Any
 
 try:
@@ -114,16 +115,49 @@ class LLMParser:
 
     def __init__(self):
         """Initialize LLM parser."""
+        # Reload .env file to pick up any changes
+        config.reload_env()
+        # Reload the API key from environment
+        import importlib
+        importlib.reload(config)
+        
         self.provider = config.LLM_PROVIDER.lower()
         
         if self.provider == "gemini":
-            if not config.GEMINI_API_KEY:
-                raise ValueError("GEMINI_API_KEY not set. Please set GEMINI_API_KEY environment variable.")
+            # Get fresh API key after reload
+            api_key = os.getenv("GEMINI_API_KEY", "") or config.GEMINI_API_KEY
+            
+            if not api_key:
+                # Try to get API key interactively
+                try:
+                    from api_key_helper import get_gemini_api_key
+                    api_key = get_gemini_api_key()
+                    if api_key:
+                        config.GEMINI_API_KEY = api_key
+                        os.environ["GEMINI_API_KEY"] = api_key
+                    else:
+                        raise ValueError("GEMINI_API_KEY not set. Please set GEMINI_API_KEY environment variable or create a .env file.")
+                except ImportError:
+                    raise ValueError("GEMINI_API_KEY not set. Please set GEMINI_API_KEY environment variable or create a .env file.")
+            else:
+                # Update config with the reloaded key
+                config.GEMINI_API_KEY = api_key
             
             if not GEMINI_AVAILABLE:
                 raise ImportError("google-generativeai package not installed. Install it with: pip install google-generativeai")
             
-            genai.configure(api_key=config.GEMINI_API_KEY)
+            # Configure with the API key and validate it immediately so
+            # authentication errors surface at startup instead of later.
+            genai.configure(api_key=api_key)
+
+            # Validate the API key by making a lightweight call. This
+            # will raise on invalid/unauthorized keys and surface a clear
+            # error to the caller (Streamlit UI or CLI) during parser init.
+            try:
+                genai.list_models()
+            except Exception as e:
+                raise ValueError(f"Gemini API key validation failed: {e}")
+
             self.model_name = config.GEMINI_MODEL
             
             # Try to create the model and handle errors gracefully
@@ -230,6 +264,17 @@ JSON:"""
         content = None
         try:
             if self.use_gemini:
+                # Reload .env file in case it was updated
+                config.reload_env()
+                # Get fresh API key
+                fresh_api_key = os.getenv("GEMINI_API_KEY", "") or config.GEMINI_API_KEY
+                if fresh_api_key and fresh_api_key != config.GEMINI_API_KEY:
+                    # API key changed, reconfigure
+                    genai.configure(api_key=fresh_api_key)
+                    config.GEMINI_API_KEY = fresh_api_key
+                    # Recreate client with new key
+                    self.client = genai.GenerativeModel(self.model_name)
+                
                 # Use Gemini API
                 full_prompt = f"""You are a helpful assistant that extracts structured data from stock-related text. Always return valid JSON only.
 
@@ -303,9 +348,21 @@ JSON:"""
                     pass
             return self._default_result()
         except Exception as e:
-            print(f"Error calling LLM API: {e}")
-            import traceback
-            traceback.print_exc()
+            error_msg = str(e)
+            # Check if it's an API key error
+            if any(keyword in error_msg.lower() for keyword in ["api key", "401", "403", "invalid", "unauthorized", "authentication", "permission denied"]):
+                print(f"\n❌ Invalid or expired API key detected!")
+                print(f"Error: {error_msg[:200]}")
+                print("\nPlease check your .env file and ensure your API key is correct.")
+                print("The .env file will be reloaded on the next API call.")
+                # Clear the cached key to force reload
+                if self.use_gemini:
+                    config.GEMINI_API_KEY = ""
+                    os.environ.pop("GEMINI_API_KEY", None)
+            else:
+                print(f"Error calling LLM API: {e}")
+                import traceback
+                traceback.print_exc()
             return self._default_result()
 
     def _normalize_result(self, result: Dict[str, Any]) -> Dict[str, Any]:

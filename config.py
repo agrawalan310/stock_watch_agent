@@ -2,6 +2,19 @@
 import os
 from pathlib import Path
 
+def reload_env():
+    """Reload environment variables from .env file."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)  # override=True ensures it reloads
+        return True
+    except ImportError:
+        # python-dotenv not installed, skip .env loading
+        return False
+
+# Load environment variables from .env file if it exists
+reload_env()
+
 # Database configuration
 DB_PATH = Path(__file__).parent / "stock_watch.db"
 
@@ -10,9 +23,11 @@ DB_PATH = Path(__file__).parent / "stock_watch.db"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "gemini" or "openai"
 
 # Google Gemini configuration (default)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyBJb9qjovfIZ5swj_DD1Ss7E1JbZ7hgNVU")
+# API key should be set via environment variable or .env file
+# Never commit your API key to the repository!
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # Common working models: "gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash-latest"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-pro")
 
 # OpenAI configuration (optional)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
