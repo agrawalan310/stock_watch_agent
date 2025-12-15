@@ -213,6 +213,27 @@ def show_add_note():
             try:
                 # Parse with LLM
                 parsed = st.session_state.parser.parse(text_input)
+
+                # Validate the parsed symbol before saving. If no symbol was
+                # extracted or the symbol cannot be resolved to market data,
+                # show an error and don't add the note.
+                parsed_symbol = parsed.get("symbol")
+                if not parsed_symbol:
+                    st.error("Could not extract a valid stock symbol from the note. Please include a valid ticker (e.g., AAPL, NVDA).")
+                    return
+
+                # Use MarketData to ensure the symbol exists
+                try:
+                    market_data = MarketData()
+                    price_info = market_data.get_price_info(parsed_symbol)
+                except Exception as md_err:
+                    # If market data cannot be fetched (e.g., yfinance not installed), surface an error
+                    st.error(f"Market data validation failed: {md_err}")
+                    return
+
+                if not price_info:
+                    st.error(f"Symbol '{parsed_symbol}' not found or has no market data. Please check the ticker and try again.")
+                    return
                 
                 # Show parsed data
                 st.success("Note parsed successfully!")

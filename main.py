@@ -43,6 +43,24 @@ def add_mode(text: Optional[str] = None):
         print(f"  Buy Price: ${parsed.get('buy_price') or 'N/A'}")
         print(f"  Conditions: {parsed.get('conditions')}")
         
+        # Validate parsed symbol before creating the note
+        parsed_symbol = parsed.get("symbol")
+        if not parsed_symbol:
+            print("\n✗ Error: Could not extract a valid stock symbol from the note. Please include a valid ticker (e.g., AAPL, NVDA).")
+            return
+
+        # Validate that the symbol resolves to market data
+        try:
+            market_data = MarketData()
+            price_info = market_data.get_price_info(parsed_symbol)
+        except Exception as md_err:
+            print(f"\n✗ Error validating symbol: {md_err}")
+            return
+
+        if not price_info:
+            print(f"\n✗ Error: Symbol '{parsed_symbol}' not found or has no market data. Please check the ticker and try again.")
+            return
+
         # Create note
         note = StockNote.create_new(
             raw_text=text,
