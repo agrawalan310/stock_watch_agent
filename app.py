@@ -514,18 +514,64 @@ def show_delete_notes():
     )
     
     if delete_option == "Delete by ID":
-        note_options = [f"{n.symbol or 'N/A'} - {n.id[:8]}... ({'Active' if n.active else 'Inactive'})" for n in all_notes]
-        selected = st.selectbox("Select note to delete:", note_options)
-        
-        if st.button("Delete Selected Note", type="primary"):
-            note_index = note_options.index(selected)
-            note = all_notes[note_index]
-            
-            if storage.delete_note(note.id):
-                st.success(f"✓ Successfully deleted note '{note.id[:8]}...'")
+        # Build a mapping of label -> note_id so we can update options after deletion
+        options = [(f"{n.symbol or 'N/A'} - {n.id[:8]}... ({'Active' if n.active else 'Inactive'})", n.id) for n in all_notes]
+
+        # If a note was recently deleted, filter it out of the options so it no longer appears
+        last_deleted = st.session_state.get('last_deleted_note_id')
+        if last_deleted:
+            options = [opt for opt in options if opt[1] != last_deleted]
+
+        labels = [opt[0] for opt in options]
+
+        if not labels:
+            st.info("No notes available to delete.")
+            # Show persisted message (if any) and allow clearing
+            if st.session_state.get('last_delete_message'):
+                st.success(st.session_state['last_delete_message'])
+                if st.button("Delete Another Note"):
+                    st.session_state.pop('last_delete_message', None)
+                    st.session_state.pop('last_deleted_note_id', None)
+                    st.rerun()
+            return
+
+        # Use a keyed selectbox so Streamlit preserves selection across reruns
+        selected_label = st.selectbox("Select note to delete:", labels, key="delete_selectbox")
+
+        # Disable the delete button if a recent delete has occurred. Some
+        # Streamlit versions don't provide `st.disabled`, so render the
+        # button with the `disabled=` argument instead.
+        disabled = bool(st.session_state.get('last_delete_message'))
+        if disabled:
+            # Render a visually disabled button so user cannot trigger another delete
+            st.button("Delete Selected Note", key="delete_button_disabled", type="primary", disabled=True)
+        else:
+            if st.button("Delete Selected Note", key="delete_button", type="primary"):
+                # Map selection back to note id
+                try:
+                    selected_idx = labels.index(selected_label)
+                except ValueError:
+                    st.error("Selected note not found. Please select another note.")
+                    return
+
+                note_id = options[selected_idx][1]
+                # Perform deletion
+                if storage.delete_note(note_id):
+                    st.session_state['last_delete_message'] = f"✓ Successfully deleted note '{note_id[:8]}...'"
+                    st.session_state['last_deleted_note_id'] = note_id
+                    # Rerun so the selectbox updates to exclude the deleted note,
+                    # while the success message is persisted in session_state.
+                    st.rerun()
+                else:
+                    st.error("Failed to delete note.")
+
+        # If there's a persisted delete message, show it and a button to delete another
+        if st.session_state.get('last_delete_message'):
+            st.success(st.session_state['last_delete_message'])
+            if st.button("Delete Another Note"):
+                st.session_state.pop('last_delete_message', None)
+                st.session_state.pop('last_deleted_note_id', None)
                 st.rerun()
-            else:
-                st.error("Failed to delete note.")
     
     elif delete_option == "Delete by Symbol":
         symbols = sorted(set([n.symbol for n in all_notes if n.symbol]))
@@ -537,10 +583,19 @@ def show_delete_notes():
         if st.button(f"Delete All Notes for {selected_symbol}", type="primary"):
             count = storage.delete_notes_by_symbol(selected_symbol)
             if count > 0:
-                st.success(f"✓ Successfully deleted {count} note(s) for {selected_symbol}")
+                st.session_state['last_delete_message'] = f"✓ Successfully deleted {count} note(s) for {selected_symbol}"
+                st.session_state['last_deleted_symbol'] = selected_symbol
                 st.rerun()
-            else:
-                st.error("Failed to delete notes.")
+
+        if st.session_state.get('last_delete_message') and st.session_state.get('last_deleted_symbol') == selected_symbol:
+            st.success(st.session_state['last_delete_message'])
+            if st.button("Delete Another Note for a Different Symbol"):
+                st.session_state.pop('last_delete_message', None)
+                st.session_state.pop('last_deleted_symbol', None)
+                st.rerun()
+        
+        # If deletion failed earlier and message is set to indicate failure, show error
+        # (Keep previous behavior minimal)
     
     elif delete_option == "Delete All Inactive":
         inactive_notes = [n for n in all_notes if not n.active]
